@@ -74,6 +74,10 @@ def feature_selection(df):
 
 # Task 4: Hyperparameter Tuning with Cross-Validation for Multiple Models
 def tune_and_compare_models(df):
+    # Split data
+    # Define models
+    # Define hyperparameter grids
+    # Perform cross-validation for each model
     train_df, test_df = df.randomSplit([0.8, 0.2], seed=42)
     evaluator = BinaryClassificationEvaluator(labelCol="label")
 
@@ -91,19 +95,35 @@ def tune_and_compare_models(df):
         "GBT": ParamGridBuilder().addGrid(models["GBT"].maxDepth, [5, 10]).addGrid(models["GBT"].maxIter, [10, 20]).build()
     }
 
-    with open("outputs/task4_model_comparison.txt", "w") as f:
-        for name, model in models.items():
-            f.write(f"Tuning {name}...\n")
-            grid = param_grids[name]
-            cv = CrossValidator(estimator=model, estimatorParamMaps=grid, evaluator=evaluator, numFolds=5)
-            cv_model = cv.fit(train_df)
-            best_model = cv_model.bestModel
-            predictions = best_model.transform(test_df)
-            auc = evaluator.evaluate(predictions)
-            f.write(f"{name} Best Model Accuracy (AUC): {auc:.2f}\n")
-            f.write(f"Best Params for {name}: {best_model.extractParamMap()}\n\n")
-            rows = predictions.select("features", "prediction").take(5)
-            save_formatted_output(rows, f"outputs/task4_{name}_predictions.txt", "features", "prediction")
+    os.makedirs("outputs/task4", exist_ok=True)
+    results_file = open("outputs/task4/model_comparison_results.txt", "w")
+
+    for name, model in models.items():
+        results_file.write(f"Tuning {name}...\n")
+        grid = param_grids[name]
+        cv = CrossValidator(estimator=model, estimatorParamMaps=grid, evaluator=evaluator, numFolds=5)
+        cv_model = cv.fit(train_df)
+        best_model = cv_model.bestModel
+        predictions = best_model.transform(test_df)
+        auc = evaluator.evaluate(predictions)
+        results_file.write(f"{name} Best Model Accuracy (AUC): {auc:.2f}\n")
+        tuned_params = [param.name for param in grid[0].keys()]  # get tuned param names
+        best_params = best_model.extractParamMap()
+        param_str = ", ".join([
+            f"{param.name}={value}" 
+            for param, value in best_params.items() 
+            if param.name in tuned_params and param.parent == best_model.uid
+        ])
+        results_file.write(f"Best Params for {name}: {param_str}\n\n")
+
+        # Save sample predictions
+        with open(f"output/task4/{name}_predictions_sample.txt", "w") as pred_file:
+            pred_file.write("+--------------------+-----------+\n")
+            pred_file.write("|features            |prediction |\n")
+            pred_file.write("+--------------------+-----------+\n")
+            for row in predictions.select("features", "prediction").take(5):
+                pred_file.write(f"|{str(row.features):<20}|{row.prediction:<11}|\n")
+            pred_file.write("+--------------------+-----------+\n")
 
 # Execute tasks
 preprocessed_df = preprocess_data(df)
